@@ -13,7 +13,9 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <chrono>
 #include <memory>
+#include <future>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/videoio.hpp>
@@ -188,7 +190,7 @@ private:
                 try
                 {
                 //std::cout << "box.x:" << box.x << " y:" << box.y << " w:" << box.width << " h:" << box.height << std::endl;
-                cv::Mat roi = frame(box);
+                cv::Mat roi(frame, box);
                 std::vector<Detection> output_armor = inf_armor.runInference(roi);
                 remove_same_obj(output_armor);
                     for (const auto& detection_armor : output_armor)
@@ -246,7 +248,7 @@ private:
         std::cout << "模式选择(test/hik):" << std::endl;
         std::string mode;
         std::cin >> mode;
-
+        
         if (mode == "hik")
         {
             HikCamera hik_camera(hik_config); // PixelType_Gvsp_RGB8_Packed format
@@ -257,10 +259,15 @@ private:
             std::cout << "是否保存处理后结果 (y/n)" << std::endl;
             std::string save_option;
             std::cin >> save_option;
+            int frame_count = 0;
             if (save_option == "y")
             {
-                writer.open("output.mp4", cv::VideoWriter::fourcc('H','2','6','4'), 30, cv::Size(1920,1080));
+                writer.open("/home/zqz/ros2_ws/output.avi", cv::VideoWriter::fourcc('X','V','I','D'), 30, cv::Size(3072,2048));
             }
+            auto start_time = std::chrono::high_resolution_clock::now();
+            std::chrono::steady_clock::time_point fps_start_time = std::chrono::steady_clock::now();
+            int fps_frame_count = 0;
+            float fps_value = 0.0f;
             while (running)
             {
                 cv::Mat frame_rgb = hik_camera.getLatestFrame();
@@ -314,9 +321,43 @@ private:
                 publisher_detection->publish(msg);
                 if (save_option == "y")
                 {
+                    //std::cout << "frame width:" << frame.cols << " height:" << frame.rows << std::endl;
                     writer.write(frame);
+                    frame_count++;
                 }
+
+
+                fps_frame_count++;
+                auto fps_now = std::chrono::steady_clock::now();
+                float fps_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        fps_now - fps_start_time).count();
+
+                if (fps_elapsed >= 200.0f)   // 每 1 秒更新一次
+                {
+                    fps_value = fps_frame_count * 1000.0f / fps_elapsed;
+                    fps_frame_count = 0;
+                    fps_start_time = fps_now;
+                }
+
+                cv::rectangle(frame, cv::Point(5,5), cv::Point(220,45), cv::Scalar(0,0,0), -1); // 黑底
+                cv::putText(
+                    frame,
+                    cv::format("FPS: %.2f", fps_value),
+                    cv::Point(10, 35),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.9,
+                    cv::Scalar(0, 255, 0),
+                    2
+                );
+
                 cv::imshow("Detection", frame);
+                if (frame_count % 30 == 0) 
+                {
+                    auto current_time = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> elapsed = current_time - start_time;
+                    double fps_calculated = frame_count / elapsed.count();  // 计算FPS
+                    std::cout << "Processed Frames: " << fps_value << " | FPS: " << fps_calculated << std::endl;
+                }
                 if (cv::waitKey(1) == 27)
                 {
                     running = false;
@@ -331,6 +372,7 @@ private:
         else if (mode == "test")
         {
             cap_.open("/home/zqz/ros2_ws/image/raw.mp4");
+            //cap_.open("/home/zqz/ros2_ws/image/test2.mp4");
             if (!cap_.isOpened())
             {
                 RCLCPP_ERROR(this->get_logger(), "Failed to open video");
@@ -338,14 +380,19 @@ private:
             }
             RCLCPP_INFO(this->get_logger(), "Video opened");
             bool running = true;
+            std::chrono::steady_clock::time_point fps_start_time = std::chrono::steady_clock::now();
+            auto avg_start_time = fps_start_time;
+            int fps_frame_count = 0;
+            float fps_value = 0.0f;
+            size_t total_frame_count = 0;
             while (running)
             {
                 cap_ >> frame;
                 //cv::Mat frame = cv::imread("/home/zqz/fjut_radar/image/test_image.jpg");
                 if (frame.empty())
                 {
-                    RCLCPP_INFO(this->get_logger(), "Video finished");
-                    return;
+                    running = false;
+                    break;
                 }
 
                 // --- 推理: 车辆 (TensorRT) ---
@@ -385,6 +432,30 @@ private:
 
                 }
                 publisher_detection->publish(msg);
+                fps_frame_count++;
+                auto fps_now = std::chrono::steady_clock::now();
+                float fps_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        fps_now - fps_start_time).count();
+
+                if (fps_elapsed >= 200.0f)
+                {
+                    fps_value = fps_frame_count * 1000.0f / fps_elapsed;
+                    fps_frame_count = 0;
+                    fps_start_time = fps_now;
+                }
+
+                total_frame_count++;
+
+                cv::rectangle(frame, cv::Point(5,5), cv::Point(220,45), cv::Scalar(0,0,0), -1);
+                cv::putText(
+                    frame,
+                    cv::format("FPS: %.2f", fps_value),
+                    cv::Point(10, 35),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.9,
+                    cv::Scalar(0, 255, 0),
+                    2
+                );
                 cv::imshow("Detection", frame);
                 if (cv::waitKey(1) == 27)
                 {
@@ -392,6 +463,12 @@ private:
                     running = false;
                 }
             }
+            auto avg_end_time = std::chrono::steady_clock::now();
+            double total_time_sec = std::chrono::duration_cast<std::chrono::duration<double>>(avg_end_time - avg_start_time).count();
+            double avg_fps = total_frame_count / std::max(total_time_sec, 1e-6);
+            RCLCPP_INFO(
+            this->get_logger(),
+            "Test video finished. Total frames: %zu, Time: %.2f s, Average FPS: %.2f", total_frame_count, total_time_sec, avg_fps);
         }
     }
 
