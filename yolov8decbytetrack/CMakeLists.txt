@@ -12,7 +12,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # ===================== CUDA / TensorRT =====================
 set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.9")
-set(TensorRT_ROOT "/media/zqz/H/ubuntu_download/TensorRT-10.13.3.9")
+# 修改这里：将TensorRT路径改为home目录下的路径
+set(TensorRT_ROOT "/home/zqz/TensorRT-10.13.3.9")
 set(msg_file "tutorial_inferfaces/msg/Detection.msg")
 set(tutorial_interfaces_dir "/home/zqz/ros2_ws/tutorial_interfaces")
 
@@ -24,26 +25,32 @@ set(CONFIG_DIR "/home/zqz/ros2_ws/config")
 find_package(CUDAToolkit REQUIRED)
 find_package(CUDA 12.9 REQUIRED)
 
+# 修改库搜索路径：从新的TensorRT路径查找
 find_library(NVINFER_LIB
     NAMES nvinfer
-    PATHS "${TensorRT_ROOT}/lib"
+    PATHS "${TensorRT_ROOT}/targets/x86_64-linux-gnu/lib"
+          "${TensorRT_ROOT}/lib"
     NO_DEFAULT_PATH
     REQUIRED
 )
 find_library(NVONNXPARSER_LIB
     NAMES nvonnxparser
-    PATHS "${TensorRT_ROOT}/lib"
+    PATHS "${TensorRT_ROOT}/targets/x86_64-linux-gnu/lib"
+          "${TensorRT_ROOT}/lib"
     NO_DEFAULT_PATH
     REQUIRED
 )
 find_library(NVINFER_PLUGIN_LIB
     NAMES nvinfer_plugin
-    PATHS "${TensorRT_ROOT}/lib"
+    PATHS "${TensorRT_ROOT}/targets/x86_64-linux-gnu/lib"
+          "${TensorRT_ROOT}/lib"
     NO_DEFAULT_PATH
 )
 
-if(NOT EXISTS "${TensorRT_ROOT}/include/NvInfer.h")
-    message(FATAL_ERROR "TensorRT headers not found in ${TensorRT_ROOT}/include")
+# 修改头文件检查路径
+if(NOT EXISTS "${TensorRT_ROOT}/targets/x86_64-linux-gnu/include/NvInfer.h" AND 
+   NOT EXISTS "${TensorRT_ROOT}/include/NvInfer.h")
+    message(FATAL_ERROR "TensorRT headers not found in ${TensorRT_ROOT}/targets/x86_64-linux-gnu/include or ${TensorRT_ROOT}/include")
 endif()
 
 # ===================== 验证海康威视SDK =====================
@@ -65,7 +72,7 @@ find_package(tutorial_interfaces REQUIRED)
 
 # ===================== 第三方库 =====================
 find_package(Eigen3 3.3 REQUIRED)
-find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED PATHS /usr/local/lib/cmake/opencv4 NO_DEFAULT_PATH)
 
 # ===================== 自定义消息 =====================
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -96,7 +103,8 @@ target_include_directories(inference_node PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${OpenCV_INCLUDE_DIRS}
     ${Eigen3_INCLUDE_DIRS}
-    ${TensorRT_ROOT}/include
+    ${TensorRT_ROOT}/targets/x86_64-linux-gnu/include  # 添加这个路径
+    ${TensorRT_ROOT}/include                            # 保留备用路径
     ${CUDA_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${tutorial_interfaces_dir}
@@ -145,8 +153,10 @@ ament_package()
 message(STATUS "TensorRT found at: ${TensorRT_ROOT}")
 message(STATUS "nvinfer library: ${NVINFER_LIB}")
 message(STATUS "nvonnxparser library: ${NVONNXPARSER_LIB}")
+message(STATUS "nvonnxparser library path: ${NVONNXPARSER_LIB}")
 message(STATUS ">>> Found OpenCV version: ${OpenCV_VERSION}")
 message(STATUS ">>> OpenCV include dir: ${OpenCV_INCLUDE_DIRS}")
 message(STATUS ">>> OpenCV libs: ${OpenCV_LIBS}")
 message(STATUS ">>> Hikvision SDK include: ${HIK_INCLUDE_DIR}")
 message(STATUS ">>> Hikvision SDK lib: ${HIK_LIB_DIR}")
+message(STATUS ">>> TensorRT include dirs: ${TensorRT_ROOT}/targets/x86_64-linux-gnu/include, ${TensorRT_ROOT}/include")

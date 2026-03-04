@@ -213,7 +213,7 @@ private:
                         cv::Rect textBox_armor(box_armor.x, box_armor.y - 20, 
                                             textSize_armor.width + 5, textSize_armor.height + 5);
 
-                        cv::rectangle(roi, textBox_armor, (0,0,0), cv::FILLED);
+                        cv::rectangle(roi, textBox_armor, cv::Scalar(0,0,0), cv::FILLED);
                         cv::putText(roi, classString_armor, cv::Point(box_armor.x + 3, box_armor.y - 5), 
                                 cv::FONT_HERSHEY_DUPLEX, 0.5, cv::Scalar(255,255,255), 1, 0);
                         //output_json_arrmor = {{"class_name:", detection_armor.className}, {"confidence:",detection_armor.confidence}};
