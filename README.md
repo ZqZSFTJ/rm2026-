@@ -17,19 +17,31 @@
 
 ## 环境要求
 
-- Ubuntu 22.04 / 20.04
-- ROS2 Humble（或其他版本，请根据实际修改）
+- Ubuntu 22.04 
+- ROS2 Humble
 - OpenCV
-- TensorRT ≥ 8.0
-- CUDA ≥ 11.0
-- CMake ≥ 3.10
+- TensorRT ≥ 10.13.3
+- CUDA ≥ 12.9
+- CMake ≥ 3.8
 - Python 3.8+（部分辅助脚本）
+- yaml
+- json
 
 ## 编译与构建
 
-### 1. 创建工作空间（若未创建）
+### 1. 编译 ROS2 功能包
 
-```bash
+cd ~/ros2_ws
+colcon build --packages-select location ui_design yolov8decbytetrack yolov11-trt tutorial-interfaces serial
+注意：serial 包虽然编译，但功能未测试。
+
+### 2. 单独编译 calibrate 包（CMake 项目）
+
+cd ~/ros2_ws/src/calibrate
+mkdir -p build && cd build
+cmake ..
+make
+
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 # 将本项目所有功能包放入 src 目录下
